@@ -1,14 +1,21 @@
   <launch>
     <!-- Turtlesim Node-->
     <node pkg="turtlesim" type="turtlesim_node" name="sim"/>
-    <node pkg="turtlesim" type="turtle_teleop_key" name="teleop" output="screen"/>
 
     <node pkg="turtlebot3_CBFs" type="fixed_obstacle.py" name="obstacle1" output="screen">
       <param name="radius" type="double" value="2.0" />
     </node>
-
-    <node pkg="turtlebot3_CBFs" type="turtle_tf_broadcaster.py" name="turtle1_tf_broadcaster" respawn="false" output="screen" >
-      <param name="turtle" type="string" value="turtle1" />
+    <node pkg="turtlebot3_CBFs" type="controller.py" name="controller" output="screen">
+          <param name="turtle" type="string" value="turtle1" />
+          <param name="path_type" type="int" value="0" />
+          <param name="circle_radius" type="double" value="2.0" />
+          <param name="ellipse_ampl_x" type="double" value="1.0" />
+          <param name="ellipse_ampl_y" type="double" value="2.0" />
+          <param name="ref_x" type="double" value="0.0" />
+          <param name="ref_y" type="double" value="10.0" />
+          <param name="line_x" type="double" value="1.0" />
+          <param name="line_y" type="double" value="1.0" />
+          <param name="epsilon" type="double" value="0.5" />
     </node>
   </launch>
 
