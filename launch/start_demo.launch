@@ -1,21 +1,27 @@
   <launch>
-    <!-- Turtlesim Node-->
-    <node pkg="turtlesim" type="turtlesim_node" name="sim"/>
+    <!-- Global Params-->
+    <param name="rate" type="double" value="100.0"/>
+    <param name="path_type" type="int" value="2"/>
 
-    <node pkg="turtlebot3_CBFs" type="fixed_obstacle.py" name="obstacle1" output="screen">
-      <param name="radius" type="double" value="2.0" />
+    <!-- Obstacle spawner-->
+    <node pkg="turtlebot3_cbfs" type="obstacle_broadcaster.py" name="obstacle1" output="screen">
+      <param name="radius" type="double" value="1.0" />
+      <param name="height" type="double" value="0.5" />
     </node>
-    <node pkg="turtlebot3_CBFs" type="controller.py" name="controller" output="screen">
+
+    <!-- Broadcast turtlebot pose-->
+    <node pkg="turtlebot3_cbfs" type="turtlebot_broadcaster.py" name="turtlebot1" output="screen" />
+
+    <!-- Turtlebot controller-->
+    <node pkg="turtlebot3_cbfs" type="controller.py" name="controller" output="screen">
           <param name="turtle" type="string" value="turtle1" />
-          <param name="path_type" type="int" value="0" />
-          <param name="circle_radius" type="double" value="2.0" />
+          <param name="circle_radius" type="double" value="1.0" />
           <param name="ellipse_ampl_x" type="double" value="1.0" />
-          <param name="ellipse_ampl_y" type="double" value="2.0" />
+          <param name="ellipse_ampl_y" type="double" value="1.5" />
           <param name="ref_x" type="double" value="0.0" />
-          <param name="ref_y" type="double" value="10.0" />
+          <param name="ref_y" type="double" value="0.0" />
           <param name="line_x" type="double" value="1.0" />
           <param name="line_y" type="double" value="1.0" />
-          <param name="epsilon" type="double" value="0.5" />
+          <param name="epsilon" type="double" value="0.1" />
     </node>
   </launch>
-

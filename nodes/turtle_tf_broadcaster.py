@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import roslib
-roslib.load_manifest('turtlebot3_CBFs')
+roslib.load_manifest('turtlebot3_cbfs')
 import rospy
 import tf
 import turtlesim.msg
