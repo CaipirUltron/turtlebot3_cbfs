@@ -87,13 +87,14 @@ class PFController:
         self.pf_error = rot.dot(self.p_vehicle - pd) + self.eps
 
         # proposed Control Lyapunov Function
-        W = np.array(((1.0, 0), (0, 5.0)))
+        W = np.array(((1.0, 0), (0, 1.0)))
         V = 0.5 * np.dot(self.pf_error, W.dot(self.pf_error))
 
         # CLF constraints
-        stabilization_rate = 10.0
+        stabilization_rate = 1.0
         a_clf = np.concatenate((np.dot(self.pf_error, np.matmul(W,self.delta)),[-1]), axis=0)
         b_clf = np.dot(np.matmul(rot, W).dot(self.pf_error), grad_pd) * self.target_speed - stabilization_rate * V
+        b_clf = b_clf.reshape((1,))
 
         # Quadratic programming problem of the type: min 1/2x'Px + q'x s.t. Gx <= h, Ax = b
         P = np.eye(3, dtype=np.double)
