@@ -26,6 +26,9 @@ class PFController:
         self.control_frequency = freq
         self.control_sample_time = 1 / freq
         self.kappa = np.array([[gains[0], 0], [0, gains[1]]])
+        self.gammaCLF = rospy.get_param('~gammaCLF')
+        self.alphaCBF = rospy.get_param('~alphaCBF')
+        self.p_gain = rospy.get_param('~p_gain')
 
         eps = rospy.get_param('~epsilon')
         self.delta = np.array([[1, 0], [0, eps]])
@@ -87,17 +90,17 @@ class PFController:
         self.pf_error = rot.dot(self.p_vehicle - pd) + self.eps
 
         # proposed Control Lyapunov Function
-        W = np.array(((1.0, 0), (0, 1.0)))
+        W = np.array(((1.0, 0), (0, 5.0)))
         V = 0.5 * np.dot(self.pf_error, W.dot(self.pf_error))
 
         # CLF constraints
-        stabilization_rate = 1.0
         a_clf = np.concatenate((np.dot(self.pf_error, np.matmul(W,self.delta)),[-1]), axis=0)
-        b_clf = np.dot(np.matmul(rot, W).dot(self.pf_error), grad_pd) * self.target_speed - stabilization_rate * V
+        b_clf = np.dot(np.matmul(rot, W).dot(self.pf_error), grad_pd) * self.target_speed - self.gammaCLF * V
         b_clf = b_clf.reshape((1,))
 
         # Quadratic programming problem of the type: min 1/2x'Px + q'x s.t. Gx <= h, Ax = b
-        P = np.eye(3, dtype=np.double)
+        # P = np.eye(3, dtype=np.double)
+        P = np.array(((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, self.p_gain)))
         q = np.zeros(3, dtype=np.double)
 
         # Control law
@@ -105,8 +108,11 @@ class PFController:
         ctrl = solve_qp(P, q, a_clf, b_clf, solver="quadprog")
 
         # Saturation on velocities
-        lin_speed = sat(ctrl[0], -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY)
-        ang_speed = sat(ctrl[1], -MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY)
+        lin_speed = ctrl[0]
+        ang_speed = ctrl[1]
+        delta = ctrl[2]
+        # lin_speed = sactrl[1]t(ctrl[0], -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY)
+        # ang_speed = sat(ctrl[1], -MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY)
 
         # Publish twist velocity
         twist = Twist()
@@ -115,12 +121,11 @@ class PFController:
         self.ctrlPub.publish(twist)
 
         # rospy.loginfo("Position (%s,%s)", self.p_vehicle[0], self.p_vehicle[1])
-        # rospy.loginfo("Error norm %s", np.linalg.norm(self.pf_error))
+        rospy.loginfo("Error norm %s", np.linalg.norm(self.pf_error))
+        rospy.loginfo("Delta = %s", delta)
         # rospy.loginfo("Gamma = %s", self.gamma_vehicle)
         # rospy.loginfo("Control = (%s,%s)", lin_speed, ang_speed)
         # rospy.loginfo("Obstacle = (%s,%s)", self.p_obstacle[0], self.p_obstacle[1])
-        rospy.loginfo("test = (%s,%s,%s)", a_clf[0], a_clf[1], a_clf[2])
-        rospy.loginfo("test = (%s)", b_clf)
 
     def turtlebot_pose_callback(self, data):
         self.p_vehicle = np.array([data.x, data.y])
@@ -135,7 +140,7 @@ if __name__ == '__main__':
         rospy.init_node('controller', anonymous=True)
 
         # Creates the controller object
-        controller = PFController(2, 0.2, np.array([0.6, 0.6]), 100.0)
+        controller = PFController(2, 0.5, np.array([0.6, 0.6]), 100.0)
 
         # Creates subscribers for both turtlebot and obstacle poses
         poseSub = rospy.Subscriber("turtlebot3_pose", Pose2D, controller.turtlebot_pose_callback)

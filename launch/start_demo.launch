@@ -3,9 +3,6 @@
     <param name="rate" type="double" value="100.0"/>
     <param name="path_type" type="int" value="2"/>
 
-    <!-- Launch robot simulation-->
-    <include file="$(find turtlebot3_fake)/launch/turtlebot3_fake.launch" />
-
     <!-- Obstacle spawner-->
     <node pkg="turtlebot3_cbfs" type="obstacle_broadcaster.py" name="obstacle1" output="screen">
       <param name="radius" type="double" value="1.0" />
@@ -26,5 +23,8 @@
           <param name="line_x" type="double" value="1.0" />
           <param name="line_y" type="double" value="1.0" />
           <param name="epsilon" type="double" value="0.1" />
+          <param name="gammaCLF" type="double" value="10.0" />
+          <param name="alphaCBF" type="double" value="1.0" />
+          <param name="p_gain" type="double" value="20.0" />
     </node>
   </launch>
