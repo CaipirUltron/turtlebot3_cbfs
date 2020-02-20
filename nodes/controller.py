@@ -2,7 +2,7 @@
 
 import rospy
 import numpy as np
-from geometry_msgs.msg import Twist, Pose2D
+from geometry_msgs.msg import Twist, Pose2D, PoseStamped
 from qpsolvers import solve_qp
 
 MAX_LINEAR_VELOCITY = 0.22
@@ -36,6 +36,9 @@ class PFController:
         self.inv_delta = np.linalg.inv(self.delta)
 
         # Initialize state variables
+        ref_x = rospy.get_param('~ref_x')
+        ref_y = rospy.get_param('~ref_y')
+        self.ref_point = np.array([ref_x, ref_y])
         self.p_vehicle = np.array([0, 0])
         self.theta_vehicle = 0
         self.gamma_vehicle = 0
@@ -48,23 +51,19 @@ class PFController:
         self.ctrlPub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
 
     def compute_path(self):
-        ref_x = rospy.get_param('~ref_x')
-        ref_y = rospy.get_param('~ref_y')
-        ref_point = np.array([ref_x, ref_y])
-
         if self.path_type == 0:  # way-point
-            pd = ref_point
+            pd = self.ref_point
             grad_pd = np.array([0, 0])
         elif self.path_type == 1:  # straight line
             line_x = rospy.get_param('~line_x')
             line_y = rospy.get_param('~line_y')
             line = np.array([line_x, line_y])
             norm_line = line / np.linalg.norm(line)
-            pd = norm_line * self.gamma_vehicle + ref_point
+            pd = norm_line * self.gamma_vehicle + self.ref_point
             grad_pd = norm_line
         elif self.path_type == 2:  # circle
             r = rospy.get_param('~circle_radius')
-            pd = np.array([r * np.cos(self.gamma_vehicle / r), r * np.sin(self.gamma_vehicle / r)]) + ref_point
+            pd = np.array([r * np.cos(self.gamma_vehicle / r), r * np.sin(self.gamma_vehicle / r)]) + self.ref_point
             grad_pd = np.array([-np.sin(self.gamma_vehicle / r), np.cos(self.gamma_vehicle / r)])
         else:
             pd = np.array([0, 0])
@@ -134,6 +133,8 @@ class PFController:
     def obstacle_callback(self, data):
         self.p_obstacle = np.array([data.x, data.y])
 
+    def nav_goal_callback(self, data):
+        self.ref_point = np.array([data.pose.position.x, data.pose.position.y])
 
 if __name__ == '__main__':
     try:
@@ -145,6 +146,7 @@ if __name__ == '__main__':
         # Creates subscribers for both turtlebot and obstacle poses
         poseSub = rospy.Subscriber("turtlebot3_pose", Pose2D, controller.turtlebot_pose_callback)
         obstacleSub = rospy.Subscriber("obstacle_pose", Pose2D, controller.obstacle_callback)
+        navGoalSub = rospy.Subscriber("move_base_simple/goal", PoseStamped, controller.nav_goal_callback)
 
         # Control frequency
         rate = rospy.Rate(controller.control_frequency)
