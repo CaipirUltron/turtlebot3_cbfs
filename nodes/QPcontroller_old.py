@@ -17,10 +17,9 @@ def sat(speed, min_speed, max_speed):
     return speed
 
 
-class PFController:
+class QPController:
 
-    def __init__(self, type=rospy.get_param('/path_type'), speed=0.1, gains=np.array([0.6, 0.6]),
-                 freq=rospy.get_param('/rate')):
+    def __init__(self, type=rospy.get_param('/path_type'), speed=0.1, gains=np.array([0.6, 0.6]), freq=rospy.get_param('/rate')):
         self.path_type = type
         self.target_speed = speed
         self.control_frequency = freq
@@ -145,8 +144,12 @@ if __name__ == '__main__':
 
         # Creates subscribers for both turtlebot and obstacle poses
         poseSub = rospy.Subscriber("turtlebot3_pose", Pose2D, controller.turtlebot_pose_callback)
+
+        LyapunovSub = rospy.Subscriber("LyapunovFun", Pose2D, controller.LyapunovCallback)
+        barrierSub = rospy.Subscriber("barrierFun", Pose2D, controller.barrierCallback)
+
         obstacleSub = rospy.Subscriber("obstacle_pose", Pose2D, controller.obstacle_callback)
-        navGoalSub = rospy.Subscriber("move_base_simple/goal", PoseStamped, controller.nav_goal_callback)
+        navGoalSub = rospy.Subscriber("clicked_point", PointStamped, controller.nav_goal_callback)
 
         # Control frequency
         rate = rospy.Rate(controller.control_frequency)

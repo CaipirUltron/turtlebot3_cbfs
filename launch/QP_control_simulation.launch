@@ -1,0 +1,26 @@
+  <launch>
+    <!-- Global Params-->
+    <param name="dim" type="int" value="3" />
+
+    <!-- Broadcast Lyapunov and Barrier-->
+    <node pkg="turtlebot3_cbfs" type="clf_broadcaster.py" name="clf_broadcaster" output="screen">
+        <param name="rate" type="double" value="100.0" />
+        <rosparam param="lambdas">[1, 4]</rosparam>
+        <rosparam param="epsilon">[0.0, 0.0]</rosparam>
+    </node>
+
+    <node pkg="turtlebot3_cbfs" type="cbf_broadcaster.py" name="cbf_broadcaster" output="screen">
+        <param name="rate" type="double" value="100.0" />
+    </node>
+
+    <!-- Turtlebot controller-->
+    <node pkg="turtlebot3_cbfs" type="QP_controller.py" name="QP_controller" output="screen">
+          <param name="rate" type="double" value="100.0" />
+          <rosparam param="ctrl_cost">[[1.0, 0.0],
+                                       [0.0, 1.0]]</rosparam>
+          <param name="delta_cost" type="double" value="5.0" />
+          <param name="gamma" type="double" value="2.0" />
+          <param name="alpha" type="double" value="1.0" />
+    </node>
+
+  </launch>
