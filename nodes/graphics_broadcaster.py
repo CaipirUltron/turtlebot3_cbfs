@@ -53,8 +53,8 @@ def place_reference(data):
     ref_marker.header.frame_id = "odom"
     ref_marker.type = ref_marker.SPHERE
     ref_marker.action = ref_marker.ADD
-    ref_marker.scale.x = 0.5
-    ref_marker.scale.y = 0.5
+    ref_marker.scale.x = 0.2
+    ref_marker.scale.y = 0.2
     ref_marker.scale.z = 0.1
     ref_marker.color.a = 1.0
     ref_marker.color.r = 0.0

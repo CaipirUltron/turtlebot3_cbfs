@@ -20,11 +20,11 @@ class Field:
             self.b = args[1]
             self.c = args[2]
 
-        self.var = np.zeros(dim)
+        self.var = np.zeros(self.dim)
         self.field = 0.0
         self.gradient = np.zeros(self.dim)
         self.hessian = np.zeros([self.dim, self.dim])
-        self.compute_local()
+        self.computeField(self.var)
 
     def __add__(self, other):
         if self.dim != other.dim:
@@ -64,7 +64,7 @@ class Field:
             raise ValueError('Fields computed at different points.')
 
         new_field = Field(self.dim, "")
-        new_field.setVar(self.var)
+        new_field.var = self.var
         new_field.field = self.field * other.field
         new_field.gradient = self.gradient * other.field + other.gradient * self.field
         grad1grad2 = np.outer(self.gradient, other.gradient)
@@ -73,12 +73,8 @@ class Field:
 
         return new_field
 
-    def setVar(self, data):
+    def computeField(self, data):
         self.var = data
-        self.compute_local()
-
-    def compute_local(self):
-        data = self.var
         if self.field_type == "const":
             self.field = self.c
             self.gradient = np.zeros(self.dim)
@@ -113,6 +109,17 @@ class Field:
         self.field = scalar_field.field
         self.gradient = np.array(scalar_field.gradient)
         self.hessian = np.array(scalar_field.hessian).reshape((self.dim, self.dim))
+
+
+class Mapping:
+
+    def __init__(self, input_dim, output_dim):
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
+        self.var = np.zeros(self.input_dim)
+        self.transform = np.zeros(self.output_dim)
+        self.jacobian = np.zeros((self.output_dim, self.input_dim))
 
 
 class AffineModel:

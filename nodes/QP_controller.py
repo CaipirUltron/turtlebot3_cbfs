@@ -96,7 +96,7 @@ class QPController:
         self.ctrl_twist.linear.x, self.ctrl_twist.linear.y, self.ctrl_twist.linear.z = lin_speed, 0.0, 0.0
         self.ctrl_twist.angular.x, self.ctrl_twist.angular.y, self.ctrl_twist.angular.z = 0.0, 0.0, ang_speed
 
-        rospy.loginfo("cmd_vel = (%s,%s)", lin_speed, ang_speed)
+        # rospy.loginfo("cmd_vel = (%s,%s)", lin_speed, ang_speed)
 
         return self.ctrl_twist
 
@@ -111,7 +111,7 @@ if __name__ == '__main__':
     try:
         rospy.init_node('controller', anonymous=True)
 
-        QP_controller = QPController(state_dim=rospy.get_param('/dim'), ctrl_dim=2)
+        QP_controller = QPController(state_dim=rospy.get_param('/model_dim'), ctrl_dim=2)
 
         pose_sub = rospy.Subscriber("turtlebot_pose", Pose2D, QP_controller.set_state)
         clf_sub = rospy.Subscriber("clf", ScalarField, QP_controller.clf_callback)

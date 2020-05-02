@@ -2,7 +2,7 @@
 
 import rospy
 import numpy as np
-from turtlebot_common.Maths import Field
+from turtlebot_common.Maths import Field, Mapping
 from turtlebot3_cbfs.msg import ScalarField
 from geometry_msgs.msg import Pose2D, PointStamped
 
@@ -20,38 +20,46 @@ def rot(th):
 
 class CLFControl:
     def __init__(self):
-        self.dim = rospy.get_param('/dim')
-        self.clf = Field(self.dim, "")
-        self.error_clf = Field(self.dim-1, "quadratic", 0.5 * np.diag(rospy.get_param('~lambdas')), np.zeros(self.dim-1), 0.0)
+        self.model_dim = rospy.get_param('/model_dim')
+        self.model_clf = Field(self.model_dim, "")
+        self.model_state = np.zeros(self.model_dim)
+
+        self.clf_dim = rospy.get_param('~dim')
+        self.clf = Field(self.clf_dim, "quadratic", 0.5 * np.diag(rospy.get_param('~lambdas')), np.zeros(self.clf_dim),
+                         0.0)
+        self.clf_state = np.zeros(self.clf_dim)
+        self.clf_jacobian = np.zeros((self.clf_dim, self.model_dim))
+
         self.epsilon = np.array(rospy.get_param('~epsilon'))
-        self.reference = np.zeros(self.dim-1)
-        self.state = np.zeros(self.dim)
-        self.error = np.zeros(self.dim-1)
-        self.grad_error = np.zeros((self.dim, self.dim-1))
-        self.compute_error()
+        self.reference = np.zeros(self.clf_dim)
+
+        # self.compute_transformation()
 
     def set_pose(self, data):
-        self.state = np.array([data.x, data.y, data.theta])
-        self.compute_error()
+        self.model_state = np.array([data.x, data.y, data.theta])
+        self.compute_transformation()
 
     def set_reference(self, data):
         self.reference = np.array([data.point.x, data.point.y])
         rospy.loginfo("Changing reference...")
-        self.compute_error()
+        self.compute_transformation()
 
-    def compute_error(self):
-        robot_position = self.state[:2]
-        robot_orientation = self.state[2]
+    # PF error transformation
+    def compute_transformation(self):
+        robot_position = self.model_state[:2]
+        robot_orientation = self.model_state[2]
         robot_rotation = rot(robot_orientation)
-        self.error = np.transpose(robot_rotation).dot(robot_position - self.reference) + self.epsilon
-        self.grad_error = np.vstack([robot_rotation, -skew(1).dot(self.error - self.epsilon)])
-        self.compute_CLF()
 
-    def compute_CLF(self):
-        self.error_clf.setVar(self.error)
-        self.clf.field = self.error_clf.field
-        self.clf.gradient = np.matmul(self.grad_error, self.error_clf.gradient)
-        self.clf.hessian = np.zeros((self.dim, self.dim))
+        self.clf_state = np.transpose(robot_rotation).dot(robot_position - self.reference) + self.epsilon
+        self.clf_jacobian = np.concatenate(
+            (np.transpose(robot_rotation), np.transpose([-skew(1).dot(self.clf_state - self.epsilon)])), axis=1)
+
+        self.compute_modelCLF()
+
+    def compute_modelCLF(self):
+        self.clf.computeField(self.clf_state)
+        self.model_clf.field = self.clf.field
+        self.model_clf.gradient = np.matmul(self.clf.gradient, self.clf_jacobian)
 
 
 if __name__ == '__main__':
@@ -69,7 +77,7 @@ if __name__ == '__main__':
         clf_pub = rospy.Publisher('clf', ScalarField, queue_size=1)
 
         while not rospy.is_shutdown():
-            clf_pub.publish(clf_controller.clf.getField())
+            clf_pub.publish(clf_controller.model_clf.getField())
             rate.sleep()
 
     except rospy.ROSInterruptException:
