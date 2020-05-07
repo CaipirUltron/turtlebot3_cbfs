@@ -109,7 +109,7 @@ class QPController:
         lin_speed = ctrl[0]
         ang_speed = ctrl[1]
         delta = ctrl[2]
-        # lin_speed = sactrl[1]t(ctrl[0], -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY)
+        # lin_speed = sat(ctrl[0], -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY)
         # ang_speed = sat(ctrl[1], -MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY)
 
         # Publish twist velocity

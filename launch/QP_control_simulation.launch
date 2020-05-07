@@ -1,6 +1,9 @@
   <launch>
     <!-- Global Params-->
     <param name="model_dim" type="int" value="3" />
+    <param name="clf_dim" type="int" value="2" />
+    <param name="cbf_dim" type="int" value="2" />
+    <param name="ctrl_dim" type="int" value="2" />
 
     <!-- Obstacle spawner-->
     <node pkg="turtlebot3_cbfs" type="graphics_broadcaster.py" name="graphics_broadcaster" output="screen">
@@ -8,27 +11,41 @@
         <rosparam param="shapes">[[1.0, 1.0]]</rosparam>
     </node>
 
+    <!-- Broadcast path following error-->
+    <node pkg="turtlebot3_cbfs" type="error_broadcaster.py" name="error_broadcaster" output="screen">
+        <param name="rate" type="double" value="100.0" />
+        <rosparam param="epsilon">[0.0, 0.0]</rosparam>
+    </node>
+
     <!-- Broadcast Lyapunov and Barrier-->
     <node pkg="turtlebot3_cbfs" type="clf_broadcaster.py" name="clf_broadcaster" output="screen">
         <param name="rate" type="double" value="100.0" />
-        <param name="dim" type="int" value="2" />
         <rosparam param="lambdas">[1, 4]</rosparam>
-        <rosparam param="epsilon">[0.0, 0.0]</rosparam>
+        <param name="visualize" type="bool" value="true" />
+        <param name="rate_level" type="double" value="10" />
     </node>
 
     <node pkg="turtlebot3_cbfs" type="cbf_broadcaster.py" name="cbf_broadcaster" output="screen">
         <param name="rate" type="double" value="100.0" />
-        <param name="dim" type="int" value="2" />
     </node>
 
-    <!-- Turtlebot controller-->
-    <node pkg="turtlebot3_cbfs" type="QP_controller.py" name="QP_controller" output="screen">
+    <node pkg="turtlebot3_cbfs" type="model_broadcaster.py" name="model_broadcaster" output="screen">
+        <param name="rate" type="double" value="100.0" />
+    </node>
+
+   <!-- Turtlebot controller-->
+    <node pkg="turtlebot3_cbfs" type="QP_controller_modified.py" name="QP_controller" output="screen">
           <param name="rate" type="double" value="100.0" />
           <rosparam param="ctrl_cost">[[1.0, 0.0],
                                        [0.0, 1.0]]</rosparam>
+          <param name="omega_cost" type="double" value="0.2" />
           <param name="delta_cost" type="double" value="4.0" />
           <param name="gamma" type="double" value="2.0" />
           <param name="alpha" type="double" value="1.0" />
+          <param name="beta" type="double" value="1.0" />
+          <param name="spin" type="bool" value="true" />
+          <param name="threshold" type="double" value="0.1" />
+          <param name="initial_tolerance" type="double" value="0.00001" />
     </node>
 
   </launch>

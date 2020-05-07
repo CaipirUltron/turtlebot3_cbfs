@@ -53,8 +53,8 @@ add_message_files(
   FILES
   Obstacle.msg
   Obstacles.msg
-  ScalarField.msg
-  ScalarFields.msg
+  Field.msg
+  Model.msg
 )
 
 ## Generate services in the 'srv' folder

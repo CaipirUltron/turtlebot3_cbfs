@@ -2,7 +2,7 @@
 
 import rospy
 import numpy as np
-from turtlebot3_cbfs.msg import Obstacle, Obstacles
+from turtlebot3_cbfs.msg import Obstacle, Obstacles, Field
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import PointStamped
 
@@ -53,13 +53,13 @@ def place_reference(data):
     ref_marker.header.frame_id = "odom"
     ref_marker.type = ref_marker.SPHERE
     ref_marker.action = ref_marker.ADD
-    ref_marker.scale.x = 0.2
-    ref_marker.scale.y = 0.2
+    ref_marker.scale.x = 0.15
+    ref_marker.scale.y = 0.15
     ref_marker.scale.z = 0.1
     ref_marker.color.a = 1.0
     ref_marker.color.r = 0.0
     ref_marker.color.g = 0.0
-    ref_marker.color.b = 1.0
+    ref_marker.color.b = 0.0
     ref_marker.pose.position.x = data.point.x
     ref_marker.pose.position.y = data.point.y
     ref_marker.pose.position.z = 0
@@ -74,8 +74,9 @@ def place_reference(data):
 if __name__ == '__main__':
     try:
         obstacles_markerArray = MarkerArray()
-        obstacles = Obstacles()
+        clf_marker = Marker()
         ref_marker = Marker()
+        obstacles = Obstacles()
 
         # Initialize node
         rospy.init_node('obstacle', anonymous=True)
@@ -87,7 +88,7 @@ if __name__ == '__main__':
         # Publishers
         reference_pub = rospy.Publisher('ref_marker', Marker, queue_size=10, latch=True)
         obstacle_pub = rospy.Publisher('obstacles_topic', Obstacles, queue_size=10, latch=True)
-        obstacle_maker_pub = rospy.Publisher('obstacles', MarkerArray, queue_size=10, latch=True)
+        obstacle_marker_pub = rospy.Publisher('obstacles', MarkerArray, queue_size=10, latch=True)
 
         # Initialize graphics
         origin = PointStamped()
@@ -98,7 +99,7 @@ if __name__ == '__main__':
 
         # Publish obstacles and stop node
         obstacle_pub.publish(obstacles)
-        obstacle_maker_pub.publish(obstacles_markerArray)
+        obstacle_marker_pub.publish(obstacles_markerArray)
         rospy.spin()
 
     except rospy.ROSInterruptException:

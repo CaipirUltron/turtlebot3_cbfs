@@ -3,7 +3,7 @@
 import rospy
 import numpy as np
 import scipy.linalg as sci_linalg
-from turtlebot_common.Maths import ScalarField, VectorField, AffineModel, On, delGv, projection, sigma
+from turtlebot_common.Maths import ScalarField, VectorField, AffineModel, On, delGv, projection, sigma, Gamma
 from turtlebot3_cbfs.msg import Field, Model
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Float64
@@ -45,17 +45,17 @@ class QPController:
         self.H = sci_linalg.block_diag(self.ctrl_cost, self.omega_cost, self.delta_cost)
 
         self.clf = ScalarField(self.clf_dim, "")
-        self.clf_model = ScalarField(self.model_dim, "")
-        self.clf_model_rotation_grad = np.zeros(self.rot_dim)
-
         self.cbf = ScalarField(self.clf_dim, "")
-        self.cbf_model = ScalarField(self.model_dim, "")
 
         self.pf_error = VectorField(self.model_dim, self.clf_dim)
-        self.position_jacobian = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+        self.position = VectorField(self.model_dim, self.cbf_dim)
+        self.position.jacobian = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+        self.position.list_jacobians = np.zeros((self.model_dim, self.cbf_dim, self.model_dim))
 
-        self.distance_threshold = np.array(rospy.get_param('~threshold'))
-        self.initial_tolerance = np.array(rospy.get_param('~initial_tolerance'))
+        self.model_clf_grad = np.zeros(self.model_dim)
+        self.model_clf_Qgrad = np.zeros(self.rot_dim)
+        self.model_cbf_grad = np.zeros(self.model_dim)
+
         self.distance = 0.0
         self.grad_distance = np.zeros(self.model_dim)
         self.gradQ_distance = np.zeros(self.rot_dim)
@@ -72,6 +72,9 @@ class QPController:
         self.a = np.vstack([self.a_clf, self.a_cbf, self.a_live])
         self.b = np.vstack([self.b_clf, self.b_cbf, self.b_live])
 
+        self.distance_threshold = np.array(rospy.get_param('~threshold'))
+        self.initial_tolerance = np.array(rospy.get_param('~initial_tolerance'))
+
         self.spin = rospy.get_param('~spin')
         self.QP_solution = np.zeros(self.ctrl_dim + self.rot_dim + 1)
         self.ctrl = np.zeros(self.ctrl_dim)
@@ -85,48 +88,60 @@ class QPController:
 
     def clf_callback(self, clf_data):
         self.clf.setField(clf_data)
-        self.clf_model.field = self.clf.field
-        self.clf_model.gradient = np.transpose(self.pf_error.jacobian).dot(self.clf.gradient)
-        self.clf_model.hessian = np.matmul(np.transpose(self.pf_error.jacobian),
-                                           np.matmul(self.cbf.hessian, self.pf_error.jacobian)) + delGv(
-            self.clf.gradient, self.pf_error.list_jacobians)
-        self.clf_model_rotation_grad = [np.transpose(On(self.pf_error.field)).dot(self.clf.gradient)]
 
     def cbf_callback(self, cbf_data):
         self.cbf.setField(cbf_data)
-        self.cbf_model.field = self.cbf.field
-        self.cbf_model.gradient = np.transpose(self.position_jacobian).dot(self.cbf.gradient)
-        self.cbf_model.hessian = np.matmul(np.transpose(self.position_jacobian),
-                                           np.matmul(self.cbf.hessian, self.position_jacobian))
 
     def compute_distance(self):
-        projection_f = projection(self.model.f_x)
+        Jx, Jy, Jf = self.pf_error.jacobian, self.position.jacobian, self.model.jacobian_f_x
+        list_Jx = self.pf_error.list_jacobians
+        list_Jy = self.position.list_jacobians
+
+        V, gradV, H_V = self.clf.field, self.clf.gradient, self.clf.hessian
+        h, gradh, H_h = self.cbf.field, self.cbf.gradient, self.cbf.hessian
+
+        self.model_clf_grad = np.transpose(Jx).dot(gradV)
+        self.model_clf_Qgrad = [np.dot(On(self.pf_error.field), gradV)]
+        self.model_cbf_grad = np.transpose(Jy).dot(gradh)
+
         G = np.matmul(self.model.g_x, np.transpose(self.model.g_x))
-        projection_GV = projection(G.dot(self.clf_model.gradient))
-        projection_Gh = projection(G.dot(self.cbf_model.gradient))
+        Gx = np.matmul(Jx, np.matmul(G, np.transpose(Jx)))
+        Gxy = np.matmul(Jx, np.matmul(G, np.transpose(Jy)))
 
-        measure = np.matmul(np.matmul(G, projection_f + projection_Gh), G)
-        self.distance = 0.5 * np.dot(self.clf_model.gradient, measure.dot(self.clf_model.gradient))
+        Jxf, Gx_gradV, Gxy_gradh = Jx.dot(self.model.f_x), Gx.dot(gradV), Gxy.dot(gradh)
+        proj_Jxf, proj_Gx_gradV, proj_Gxy_gradh = projection(Jxf), projection(Gx_gradV), projection(Gxy_gradh)
 
-        # print(G.dot(self.clf_model.gradient))
+        measure = np.matmul(Gx, np.matmul(proj_Jxf + proj_Gxy_gradh, Gx))
+        self.distance = 0.5 * np.dot(gradV, measure.dot(gradV))
 
-        term1 = np.matmul(np.transpose(self.model.jacobian_f_x), projection_GV).dot(self.model.f_x)
-        term2 = np.matmul(
-            np.matmul(self.clf_model.hessian, G) + np.transpose(delGv(self.clf_model.gradient, self.model.list_jacobians)),
-            np.matmul(projection_f + projection_Gh, G)).dot(self.clf_model.gradient)
-        term3 = np.matmul(
-            np.matmul(self.cbf_model.hessian, G) + np.transpose(delGv(self.cbf_model.gradient, self.model.list_jacobians)),
-            np.matmul(projection_GV, G)).dot(self.cbf_model.gradient)
+        delf_Jx = delGv(self.model.f_x, self.pf_error.list_jacobians)
+        matrix1 = np.transpose(np.matmul(Jx, Jf) + delf_Jx)
+        term1 = np.matmul(matrix1, proj_Gx_gradV).dot(Jxf)
+
+        delx_G = delGv(self.model_clf_grad, self.model.list_jacobians)
+        Gamma_xx = Gamma(Jx, list_Jx, Jx, list_Jx, G, gradV)
+        matrix2 = np.transpose(np.matmul(Gx, np.matmul(H_V, Jx)) + Gamma_xx + np.matmul(Jx, delx_G))
+        term2 = np.matmul(matrix2, proj_Jxf + proj_Gxy_gradh).dot(Gx_gradV)
+
+        dely_G = delGv(self.model_cbf_grad, self.model.list_jacobians)
+        Gamma_xy = Gamma(Jx, list_Jx, Jy, list_Jy, G, gradh)
+        matrix3 = np.transpose(np.matmul(Gxy, np.matmul(H_h, Jy)) + Gamma_xy + np.matmul(Jx, dely_G))
+        term3 = np.matmul(matrix3, proj_Gx_gradV).dot(Gxy_gradh)
+
         self.grad_distance = term1 + term2 + term3
 
-        matrix = np.transpose(np.matmul(self.clf.hessian, On(self.pf_error.field)) - On(self.clf.gradient))
-        self.gradQ_distance = np.matmul(matrix, np.matmul(self.pf_error.jacobian, measure)).dot(self.clf_model.gradient)
+        matrix4 = np.transpose(np.matmul(H_V, On(self.pf_error.field)) - On(gradV))
+        self.gradQ_distance = np.matmul(matrix4, measure).dot(gradV)
 
-    def compute_liveness(self):
-        sigmaValue, dsigmaValue = sigma(self.cbf_model.field)
-        self.live = sigmaValue * (self.distance - self.distance_threshold)
-        self.live_grad = sigmaValue * self.grad_distance + dsigmaValue * (self.distance - self.distance_threshold) * self.cbf_model.gradient
+        # Compute liveness
+        deltaD = self.distance - self.distance_threshold
+        sigmaValue, dsigmaValue = sigma(h)
+        self.live = sigmaValue * deltaD
+        self.live_grad = sigmaValue * self.grad_distance + dsigmaValue * deltaD * self.model_cbf_grad
         self.live_gradQ = sigmaValue * self.gradQ_distance
+        # self.live = deltaD
+        # self.live_grad = self.grad_distance
+        # self.live_gradQ = self.gradQ_distance
 
     def model_callback(self, model_msg):
         self.model.setModel(model_msg)
@@ -135,18 +150,17 @@ class QPController:
 
         # Compute distance from manifold and liveness barrier
         self.compute_distance()
-        self.compute_liveness()
 
         # Define quadratic program
-        self.a_clf = np.concatenate([np.matmul(self.clf_model.gradient, self.model.g_x),
-                                     self.clf_model_rotation_grad,
+        self.a_clf = np.concatenate([np.matmul(self.model_clf_grad, self.model.g_x),
+                                     self.model_clf_Qgrad,
                                      [-1.0]])
-        self.b_clf = np.array([-np.matmul(self.clf_model.gradient, self.model.f_x) - self.gamma * self.clf.field])
+        self.b_clf = np.array([-np.matmul(self.model_clf_grad, self.model.f_x) - self.gamma * self.clf.field])
 
-        self.a_cbf = np.concatenate([-np.matmul(self.cbf_model.gradient, self.model.g_x),
+        self.a_cbf = np.concatenate([-np.matmul(self.model_cbf_grad, self.model.g_x),
                                      [0.0],
                                      [0.0]])
-        self.b_cbf = np.array([np.matmul(self.cbf_model.gradient, self.model.f_x) + self.alpha * self.cbf.field])
+        self.b_cbf = np.array([np.matmul(self.model_cbf_grad, self.model.f_x) + self.alpha * self.cbf.field])
 
         a_WITHOUTspin = np.vstack([self.a_clf, self.a_cbf])
         b_WITHOUTspin = np.vstack([self.b_clf, self.b_cbf]).reshape((2,))
@@ -166,26 +180,15 @@ class QPController:
             self.a = a_WITHOUTspin
             self.b = b_WITHOUTspin
 
-        # print(self.a)
-        # print(self.b)
-
-        # a_linear = np.array([[1, 0, 0], [-1, 0, 0]])
-        # b_linear = np.array([MAX_LINEAR_VELOCITY, MIN_LINEAR_VELOCITY])
-
-        # a_angular = np.array([[0, 1, 0], [0, -1, 0]])
-        # b_angular = np.array([MAX_ANGULAR_VELOCITY, MIN_ANGULAR_VELOCITY])
-
-        # a_sat = np.vstack([a_linear, a_angular])
-        # b_sat = np.concatenate([b_linear, b_angular])
-
-        # a = np.vstack([self.a_clf, a_sat])
-        # b = np.concatenate([self.b_clf, b_sat])
-
         # Solve Quadratic Program of the type: min 1/2x'Hx s.t. ax <= b with quadprog
+        # if self.spin and self.distance < self.initial_tolerance:
         if self.spin and self.distance < self.initial_tolerance:
             self.ctrl = np.zeros(self.ctrl_dim)
             self.omega.data = self.omega_turn
+            rospy.loginfo("Distance too small...")
         else:
+            # print(self.a_live)
+            # print(self.b_live)
             self.QP_solution = solve_qp(self.H, np.zeros(self.ctrl_dim + self.rot_dim + 1), self.a, self.b,
                                         solver="quadprog")
 
@@ -196,14 +199,17 @@ class QPController:
                 self.omega.data = 0.0
             self.delta = self.QP_solution[-1]
 
-        lin_speed = self.ctrl[0]
-        ang_speed = self.ctrl[1]
+        # lin_speed = self.ctrl[0]
+        # ang_speed = self.ctrl[1]
+
+        lin_speed = sat(self.ctrl[0], -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY)
+        ang_speed = sat(self.ctrl[1], -MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY)
 
         # Publish twist velocity
         self.ctrl_twist.linear.x, self.ctrl_twist.linear.y, self.ctrl_twist.linear.z = lin_speed, 0.0, 0.0
         self.ctrl_twist.angular.x, self.ctrl_twist.angular.y, self.ctrl_twist.angular.z = 0.0, 0.0, ang_speed
 
-        # rospy.loginfo("cmd_vel = (%s,%s)", lin_speed, ang_speed)
+        rospy.loginfo("Control = (%s,%s)", lin_speed, ang_speed)
 
 
 if __name__ == '__main__':
@@ -227,7 +233,6 @@ if __name__ == '__main__':
         while not rospy.is_shutdown():
             QP_controller.solve_QP()
             ctrl_pub.publish(QP_controller.ctrl_twist)
-            print(QP_controller.distance)
             if QP_controller.spin:
                 omega_pub.publish(QP_controller.omega)
             rate.sleep()
