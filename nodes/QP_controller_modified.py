@@ -56,13 +56,15 @@ class QPController:
         self.model_clf_Qgrad = np.zeros(self.rot_dim)
         self.model_cbf_grad = np.zeros(self.model_dim)
 
-        self.distance = 0.0
-        self.grad_distance = np.zeros(self.model_dim)
-        self.gradQ_distance = np.zeros(self.rot_dim)
+        self.distance = ScalarField(self.model_dim, "")
+        self.distance.field = 0.0
+        self.distance.gradient = np.zeros(self.model_dim)
+        self.distance.Qgradient = np.zeros(self.rot_dim)
 
-        self.live = 0.0
-        self.live_grad = np.zeros(self.model_dim)
-        self.live_gradQ = np.zeros(self.rot_dim)
+        self.live = ScalarField(self.model_dim, "")
+        self.live.field = 0.0
+        self.live.gradient = np.zeros(self.model_dim)
+        self.live.Qgradient = np.zeros(self.rot_dim)
 
         self.model = AffineModel("unicycle")
         self.model.computeModel(np.zeros(self.model_dim))
@@ -112,7 +114,7 @@ class QPController:
         proj_Jxf, proj_Gx_gradV, proj_Gxy_gradh = projection(Jxf), projection(Gx_gradV), projection(Gxy_gradh)
 
         measure = np.matmul(Gx, np.matmul(proj_Jxf + proj_Gxy_gradh, Gx))
-        self.distance = 0.5 * np.dot(gradV, measure.dot(gradV))
+        self.distance.field = 0.5 * np.dot(gradV, measure.dot(gradV))
 
         delf_Jx = delGv(self.model.f_x, self.pf_error.list_jacobians)
         matrix1 = np.transpose(np.matmul(Jx, Jf) + delf_Jx)
@@ -128,20 +130,23 @@ class QPController:
         matrix3 = np.transpose(np.matmul(Gxy, np.matmul(H_h, Jy)) + Gamma_xy + np.matmul(Jx, dely_G))
         term3 = np.matmul(matrix3, proj_Gx_gradV).dot(Gxy_gradh)
 
-        self.grad_distance = term1 + term2 + term3
+        self.distance.gradient = term1 + term2 + term3
 
         matrix4 = np.transpose(np.matmul(H_V, On(self.pf_error.field)) - On(gradV))
-        self.gradQ_distance = np.matmul(matrix4, measure).dot(gradV)
+        self.distance.Qgradient = np.matmul(matrix4, measure).dot(gradV)
 
         # Compute liveness
-        deltaD = self.distance - self.distance_threshold
+        deltaD = self.distance.field - self.distance_threshold
         sigmaValue, dsigmaValue = sigma(h)
-        self.live = sigmaValue * deltaD
-        self.live_grad = sigmaValue * self.grad_distance + dsigmaValue * deltaD * self.model_cbf_grad
-        self.live_gradQ = sigmaValue * self.gradQ_distance
-        # self.live = deltaD
-        # self.live_grad = self.grad_distance
-        # self.live_gradQ = self.gradQ_distance
+
+        # self.live.field = sigmaValue * deltaD
+        # self.live.gradient = sigmaValue * self.distance.gradient + dsigmaValue * deltaD * self.model_cbf_grad
+        # self.live.Qgradient = sigmaValue * self.distance.Qgradient
+
+        kappa = 10
+        self.live.field = sigmaValue * deltaD + (1 - sigmaValue) * kappa
+        self.live.gradient = sigmaValue * self.distance.gradient + dsigmaValue * (deltaD - kappa) * self.model_cbf_grad
+        self.live.Qgradient = sigmaValue * self.distance.Qgradient
 
     def model_callback(self, model_msg):
         self.model.setModel(model_msg)
@@ -165,10 +170,13 @@ class QPController:
         a_WITHOUTspin = np.vstack([self.a_clf, self.a_cbf])
         b_WITHOUTspin = np.vstack([self.b_clf, self.b_cbf]).reshape((2,))
 
-        self.a_live = np.concatenate([-np.matmul(self.live_grad, self.model.g_x),
-                                      [-self.live_gradQ],
-                                      [0.0]])
-        self.b_live = np.array([np.matmul(self.live_grad, self.model.f_x) + self.beta * self.live])
+        self.a_live = np.concatenate([-np.matmul(self.live.gradient, self.model.g_x),
+                                      [-self.live.Qgradient],
+                                      [-0.0]])
+        self.b_live = np.array([np.matmul(self.live.gradient, self.model.f_x) + self.beta * self.live.field])
+
+        # print(self.a_live)
+        # print(self.b_live)
 
         a_WITHspin = np.vstack([self.a_clf, self.a_cbf, self.a_live])
         b_WITHspin = np.vstack([self.b_clf, self.b_cbf, self.b_live]).reshape((3,))
@@ -182,25 +190,24 @@ class QPController:
 
         # Solve Quadratic Program of the type: min 1/2x'Hx s.t. ax <= b with quadprog
         # if self.spin and self.distance < self.initial_tolerance:
-        if self.spin and self.distance < self.initial_tolerance:
-            self.ctrl = np.zeros(self.ctrl_dim)
-            self.omega.data = self.omega_turn
-            rospy.loginfo("Distance too small...")
+        # if self.spin and self.distance.field < self.initial_tolerance:
+        #     self.ctrl = np.zeros(self.ctrl_dim)
+        #     self.omega.data = self.omega_turn
+        #     rospy.loginfo("Distance too small...")
+        # else:
+        #     # print(self.a_live)
+        #     # print(self.b_live)
+        self.QP_solution = solve_qp(self.H, np.zeros(self.ctrl_dim + self.rot_dim + 1), self.a, self.b, solver="quadprog")
+
+        self.ctrl = self.QP_solution[:self.ctrl_dim]
+        if self.spin:
+            self.omega.data = self.QP_solution[self.ctrl_dim:self.ctrl_dim + self.rot_dim]
         else:
-            # print(self.a_live)
-            # print(self.b_live)
-            self.QP_solution = solve_qp(self.H, np.zeros(self.ctrl_dim + self.rot_dim + 1), self.a, self.b,
-                                        solver="quadprog")
+            self.omega.data = 0.0
+        self.delta = self.QP_solution[-1]
 
-            self.ctrl = self.QP_solution[:self.ctrl_dim]
-            if self.spin:
-                self.omega.data = self.QP_solution[self.ctrl_dim:self.ctrl_dim + self.rot_dim]
-            else:
-                self.omega.data = 0.0
-            self.delta = self.QP_solution[-1]
-
-        # lin_speed = self.ctrl[0]
-        # ang_speed = self.ctrl[1]
+        lin_speed = self.ctrl[0]
+        ang_speed = self.ctrl[1]
 
         lin_speed = sat(self.ctrl[0], -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY)
         ang_speed = sat(self.ctrl[1], -MAX_ANGULAR_VELOCITY, MAX_ANGULAR_VELOCITY)
@@ -209,7 +216,7 @@ class QPController:
         self.ctrl_twist.linear.x, self.ctrl_twist.linear.y, self.ctrl_twist.linear.z = lin_speed, 0.0, 0.0
         self.ctrl_twist.angular.x, self.ctrl_twist.angular.y, self.ctrl_twist.angular.z = 0.0, 0.0, ang_speed
 
-        rospy.loginfo("Control = (%s,%s)", lin_speed, ang_speed)
+        # rospy.loginfo("Control = (%s,%s)", lin_speed, ang_speed)
 
 
 if __name__ == '__main__':
@@ -227,14 +234,19 @@ if __name__ == '__main__':
         # Publishers
         ctrl_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
         omega_pub = rospy.Publisher('clf_omega', Float64, queue_size=1)
+        distance_pub = rospy.Publisher('distance', Field, queue_size=1)
+        liveness_pub = rospy.Publisher('liveness', Field, queue_size=1)
 
         # Control frequency
         rate = rospy.Rate(QP_controller.control_frequency)
+        rospy.sleep(0.1)
         while not rospy.is_shutdown():
             QP_controller.solve_QP()
             ctrl_pub.publish(QP_controller.ctrl_twist)
             if QP_controller.spin:
                 omega_pub.publish(QP_controller.omega)
+            distance_pub.publish(QP_controller.distance.sendField())
+            liveness_pub.publish(QP_controller.live.sendField())
             rate.sleep()
 
     except rospy.ROSInterruptException:

@@ -20,7 +20,7 @@
     <!-- Broadcast Lyapunov and Barrier-->
     <node pkg="turtlebot3_cbfs" type="clf_broadcaster.py" name="clf_broadcaster" output="screen">
         <param name="rate" type="double" value="100.0" />
-        <rosparam param="lambdas">[1, 4]</rosparam>
+        <rosparam param="lambdas">[1, 6]</rosparam>
         <param name="visualize" type="bool" value="true" />
         <param name="rate_level" type="double" value="10" />
     </node>
@@ -40,12 +40,12 @@
                                        [0.0, 1.0]]</rosparam>
           <param name="omega_cost" type="double" value="0.2" />
           <param name="delta_cost" type="double" value="4.0" />
-          <param name="gamma" type="double" value="2.0" />
+          <param name="gamma" type="double" value="1.0" />
           <param name="alpha" type="double" value="1.0" />
           <param name="beta" type="double" value="1.0" />
           <param name="spin" type="bool" value="true" />
           <param name="threshold" type="double" value="0.1" />
-          <param name="initial_tolerance" type="double" value="0.00001" />
+          <param name="initial_tolerance" type="double" value="0.00000001" />
     </node>
 
   </launch>

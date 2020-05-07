@@ -67,9 +67,9 @@ def projection(vector):
 
 
 def sigma(data):
-    gamma = 0.01
-    f = np.exp(-data / gamma)
-    df = -f / gamma
+    gamma = 1
+    f = np.exp(-np.power(data/gamma, 2))
+    df = -(2*data/np.power(gamma, 2)) * f
     # f = -(1/gamma)*data + 1
     # df = -(1/gamma)
     return f, df
@@ -94,6 +94,7 @@ class ScalarField:
         self.var = np.zeros(self.dim)
         self.field = 0.0
         self.gradient = np.zeros(self.dim)
+        self.Qgradient = 0.0
         self.hessian = np.zeros([self.dim, self.dim])
         self.computeField(self.var)
 
@@ -108,6 +109,7 @@ class ScalarField:
         new_field.var = self.var
         new_field.field = self.field + other.field
         new_field.gradient = self.gradient + other.gradient
+        new_field.Qgradient = self.Qgradient + other.Qgradient
         new_field.hessian = self.hessian + other.hessian
 
         return new_field
@@ -123,6 +125,7 @@ class ScalarField:
         new_field.var = self.var
         new_field.field = self.field - other.field
         new_field.gradient = self.gradient - other.gradient
+        new_field.Qgradient = self.Qgradient - other.Qgradient
         new_field.hessian = self.hessian - other.hessian
 
         return new_field
@@ -139,6 +142,7 @@ class ScalarField:
         new_field.field = self.field * other.field
         new_field.gradient = self.gradient * other.field + other.gradient * self.field
         grad1grad2 = np.outer(self.gradient, other.gradient)
+        new_field.Qgradient = self.Qgradient * other.Qgradient
         new_field.hessian = self.hessian * other.field + grad1grad2 + np.transpose(
             grad1grad2) + self.field * other.hessian
 
@@ -167,6 +171,7 @@ class ScalarField:
         scalar_field.var = []
         scalar_field.field = [self.field]
         scalar_field.gradient = []
+        scalar_field.Qgradient = [self.Qgradient]
         scalar_field.hessian = []
         for i in range(0, self.dim):
             scalar_field.var.append(self.var[i])
@@ -183,6 +188,7 @@ class ScalarField:
         self.var = np.array(scalar_field.var)
         self.field = scalar_field.field[0]
         self.gradient = np.array(scalar_field.gradient)
+        self.Qgradient = scalar_field.Qgradient[0]
         self.hessian = np.array(scalar_field.hessian).reshape((self.dim, self.dim))
 
 
